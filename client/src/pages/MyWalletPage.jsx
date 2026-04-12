@@ -74,6 +74,7 @@ export default function MyWalletPage() {
 
   // Form States
   const [budgetInput, setBudgetInput] = useState('');
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [txTitle, setTxTitle] = useState('');
   const [txAmount, setTxAmount] = useState('');
   const [txCategory, setTxCategory] = useState('other');
@@ -103,6 +104,7 @@ export default function MyWalletPage() {
       }
     }));
     setBudgetInput('');
+    setIsEditingBudget(false);
   };
 
   const handleAddTransaction = (e) => {
@@ -342,6 +344,7 @@ export default function MyWalletPage() {
                   <button 
                     onClick={() => {
                       setBudgetInput(currentData.budget > 0 ? currentData.budget.toString() : '');
+                      setIsEditingBudget(true);
                     }}
                     className="p-2 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all"
                   >
@@ -349,7 +352,7 @@ export default function MyWalletPage() {
                   </button>
                 </div>
                 
-                {currentData.budget === 0 ? (
+                {currentData.budget === 0 || isEditingBudget ? (
                   <form onSubmit={handleSetBudget} className="flex flex-col sm:flex-row gap-3 mt-4">
                     <input
                       type="number"
@@ -360,10 +363,10 @@ export default function MyWalletPage() {
                       autoFocus
                     />
                     <div className="flex gap-2">
-                      <button type="submit" className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors">
+                       <button type="submit" className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors">
                         Save
                       </button>
-                      <button type="button" onClick={() => setBudgetInput('')} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium transition-colors">
+                      <button type="button" onClick={() => { setBudgetInput(''); setIsEditingBudget(false); }} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium transition-colors">
                         Cancel
                       </button>
                     </div>
