@@ -1,7 +1,7 @@
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { Wallet, LogOut, LayoutGrid, Settings, User, Utensils, Car, ShoppingBag, Zap, Home, Coffee, ArrowRight, ChevronRight } from 'lucide-react';
+import { Wallet, LogOut, LayoutGrid, Settings, User, Utensils, Car, ShoppingBag, Zap, Home, Coffee, ArrowRight, ChevronRight, CheckSquare } from 'lucide-react';
 
 const CATEGORIES = {
   food: { label: 'Food & Dining', icon: Utensils, color: 'text-orange-500', bg: 'bg-orange-100 dark:bg-orange-500/10' },
@@ -64,6 +64,15 @@ export default function DashboardPage() {
       icon: <Wallet className="w-10 h-10 mb-4 text-white" />,
       color: 'from-blue-500 to-indigo-600',
       path: '/wallet'
+    },
+    {
+      id: 'tasks',
+      name: 'Daily Tasks',
+      description: 'Manage and track your daily tasks effectively.',
+      icon: <CheckSquare className="w-10 h-10 mb-4 text-white" />,
+      color: 'from-emerald-400 to-teal-600',
+      path: '/tasks',
+      disabled: false
     },
     // Placeholders for future micro-apps
     {
