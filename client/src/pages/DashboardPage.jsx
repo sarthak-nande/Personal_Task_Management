@@ -39,9 +39,10 @@ export default function DashboardPage() {
           const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
           const monthData = data[currentMonth];
           if (monthData) {
-            if (monthData.budget) {
-              const spent = monthData.transactions ? monthData.transactions.reduce((acc, tx) => acc + tx.amount, 0) : 0;
-              setBalance(monthData.budget - spent);
+            if (monthData.budget !== undefined) {
+              const totalExpense = monthData.transactions ? monthData.transactions.reduce((acc, tx) => acc + (tx.type === 'income' ? 0 : tx.amount), 0) : 0;
+              const totalIncome = monthData.transactions ? monthData.transactions.reduce((acc, tx) => acc + (tx.type === 'income' ? tx.amount : 0), 0) : 0;
+              setBalance(monthData.budget + totalIncome - totalExpense);
             }
             if (monthData.transactions && monthData.transactions.length > 0) {
               const sorted = [...monthData.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -184,8 +185,8 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-gray-900 dark:text-white text-base sm:text-lg">
-                        -₹{tx.amount.toLocaleString()}
+                      <p className={`font-bold text-base sm:text-lg ${tx.type === 'income' ? 'text-emerald-500' : 'text-gray-900 dark:text-white'}`}>
+                        {tx.type === 'income' ? '+' : '-'}₹{tx.amount.toLocaleString()}
                       </p>
                     </div>
                   </div>
