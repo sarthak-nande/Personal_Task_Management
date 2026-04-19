@@ -1,61 +1,133 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { ArrowLeft, CheckCircle, Circle, Plus, Trash2, ListTodo, PartyPopper } from 'lucide-react';
-
-const CATEGORIES = [
-  'Work',
-  'Personal',
-  'Shopping',
-  'Health',
-  'General'
-];
+import { ArrowLeft, CheckCircle, Circle, Plus, Trash2, Edit3, Check, X, ListTodo, PartyPopper, FolderPlus } from 'lucide-react';
 
 export default function TaskPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
+  const [lists, setLists] = useState([]);
+  
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskCategory, setNewTaskCategory] = useState('General');
+  const [selectedListId, setSelectedListId] = useState('');
+  const [newListName, setNewListName] = useState('');
+  
+  const [editingListId, setEditingListId] = useState(null);
+  const [editListTitle, setEditListTitle] = useState('');
+  
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editTaskTitle, setEditTaskTitle] = useState('');
+
   const [showCelebration, setShowCelebration] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchTasks();
+    fetchData();
   }, []);
 
-  const fetchTasks = async () => {
+  const fetchData = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      const res = await fetch('/api/tasks', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTasks(data);
+      const [listsRes, tasksRes] = await Promise.all([
+        fetch('/api/lists', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/tasks', { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+
+      if (listsRes.ok && tasksRes.ok) {
+        let listsData = await listsRes.json();
+        let tasksData = await tasksRes.json();
+        
+        // Ensure that default selected list works
+        setLists(listsData);
+        setTasks(tasksData);
+        if (listsData.length > 0 && !selectedListId) {
+          setSelectedListId(listsData[0]._id);
+        }
       }
     } catch (e) {
-      console.error('Failed to fetch tasks', e);
+      console.error('Failed to fetch data', e);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddTask = async (e) => {
+  // ----- LISTS API -----
+  const handleCreateList = async (e) => {
     e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-
+    if (!newListName.trim()) return;
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/tasks', {
+      const res = await fetch('/api/lists', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ title: newTaskTitle, category: newTaskCategory })
+        body: JSON.stringify({ name: newListName })
+      });
+      if (res.ok) {
+        const newList = await res.json();
+        setLists([...lists, newList]);
+        setNewListName('');
+        if (!selectedListId) setSelectedListId(newList._id);
+      }
+    } catch (e) {
+      console.error('Failed to create list', e);
+    }
+  };
+
+  const handleUpdateList = async (listId) => {
+    if (!editListTitle.trim()) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/lists/${listId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: editListTitle })
+      });
+      if (res.ok) {
+        setLists(lists.map(l => l._id === listId ? { ...l, name: editListTitle } : l));
+        setEditingListId(null);
+      }
+    } catch (e) {
+      console.error('Failed to update list', e);
+    }
+  };
+
+  const handleDeleteList = async (listId) => {
+    if (!confirm('Are you sure you want to delete this list and all its tasks?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/lists/${listId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setLists(lists.filter(l => l._id !== listId));
+        setTasks(tasks.filter(t => t.listId !== listId));
+        if (selectedListId === listId) {
+          setSelectedListId(lists.length > 1 ? lists.find(l => l._id !== listId)._id : '');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to delete list', e);
+    }
+  };
+
+  // ----- TASKS API -----
+  const handleAddTask = async (e) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || !selectedListId) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: newTaskTitle, listId: selectedListId })
       });
 
       if (res.ok) {
@@ -72,7 +144,6 @@ export default function TaskPage() {
   const toggleTaskCompletion = async (taskId, currentStatus) => {
     try {
       const token = localStorage.getItem('token');
-      // Optimistic upate
       const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, isCompleted: !currentStatus } : t);
       setTasks(updatedTasks);
       
@@ -84,16 +155,30 @@ export default function TaskPage() {
 
       await fetch(`/api/tasks/${taskId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ isCompleted: !currentStatus })
       });
     } catch (e) {
       console.error('Failed to update task', e);
-      // Revert on failure
-      fetchTasks();
+      fetchData();
+    }
+  };
+
+  const handleUpdateTask = async (taskId) => {
+    if (!editTaskTitle.trim()) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: editTaskTitle })
+      });
+      if (res.ok) {
+        setTasks(tasks.map(t => t._id === taskId ? { ...t, title: editTaskTitle } : t));
+        setEditingTaskId(null);
+      }
+    } catch (e) {
+      console.error('Failed to update task', e);
     }
   };
 
@@ -103,8 +188,6 @@ export default function TaskPage() {
       const updatedTasks = tasks.filter(t => t._id !== taskId);
       setTasks(updatedTasks);
       
-      // If we deleted the last uncompleted task, maybe celebrate? 
-      // But only if there are tasks left.
       if (updatedTasks.length > 0) {
         checkAllCompleted(updatedTasks, false);
       } else {
@@ -117,7 +200,7 @@ export default function TaskPage() {
       });
     } catch (e) {
       console.error('Failed to delete task', e);
-      fetchTasks();
+      fetchData();
     }
   };
 
@@ -132,9 +215,9 @@ export default function TaskPage() {
     }
   };
 
-  // Group tasks by category
-  const tasksByCategory = CATEGORIES.reduce((acc, cat) => {
-    acc[cat] = tasks.filter(t => t.category === cat);
+  // Group tasks by list ID
+  const tasksByList = lists.reduce((acc, list) => {
+    acc[list._id] = tasks.filter(t => t.listId === list._id || (t.listId && t.listId._id === list._id));
     return acc;
   }, {});
 
@@ -152,7 +235,6 @@ export default function TaskPage() {
             <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2">Congratulations!</h2>
             <p className="text-gray-500 dark:text-gray-400 font-medium text-lg">You've completed all your tasks.</p>
           </div>
-          {/* Confetti Particles CSS Animation */}
           {Array.from({ length: 50 }).map((_, i) => (
             <div 
               key={i}
@@ -189,7 +271,7 @@ export default function TaskPage() {
               <ListTodo className="text-white w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">Daily Tasks</h1>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">Daily Tasks & Lists</h1>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400 leading-tight">Stay productive</p>
             </div>
           </div>
@@ -200,7 +282,7 @@ export default function TaskPage() {
         {/* Progress Card */}
         <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 mb-8 flex flex-col sm:flex-row items-center gap-6">
           <div className="flex-1 w-full">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Today's Progress</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Overall Progress</h2>
             <div className="w-full h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-500 ease-out"
@@ -208,12 +290,37 @@ export default function TaskPage() {
               ></div>
             </div>
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-2">
-              {completedCount} of {tasks.length} tasks completed
+              {completedCount} of {tasks.length} tasks completed globally
             </p>
           </div>
           <div className="w-20 h-20 rounded-full border-4 border-emerald-100 dark:border-emerald-900/30 flex items-center justify-center text-emerald-500 shrink-0">
             <span className="text-xl font-bold">{progressPercent}%</span>
           </div>
+        </div>
+
+        {/* Add List Input */}
+        <div className="mb-8">
+          <form onSubmit={handleCreateList} className="flex gap-3">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <FolderPlus className="h-5 w-5 text-gray-400" />
+              </div>
+              <input 
+                type="text" 
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                placeholder="Create a new list..."
+                className="w-full bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-2xl pl-12 pr-5 py-3 focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-500 outline-none transition-all text-gray-900 dark:text-white placeholder-gray-400 font-medium"
+              />
+            </div>
+            <button 
+              type="submit"
+              disabled={!newListName.trim()}
+              className="bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-2xl px-5 py-3 font-bold transition-all flex items-center justify-center shadow-lg shadow-blue-500/30"
+            >
+              Add List
+            </button>
+          </form>
         </div>
 
         {/* Add Task Form */}
@@ -229,16 +336,23 @@ export default function TaskPage() {
             />
           </div>
           <div className="flex gap-3">
-            <select
-              value={newTaskCategory}
-              onChange={(e) => setNewTaskCategory(e.target.value)}
-              className="bg-gray-100 dark:bg-gray-800 border border-transparent dark:border-gray-700 rounded-2xl px-4 py-4 text-gray-700 dark:text-gray-300 font-medium focus:ring-4 focus:ring-emerald-500/20 outline-none cursor-pointer appearance-none transition-all"
-            >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            {lists.length > 0 ? (
+              <select
+                value={selectedListId}
+                onChange={(e) => setSelectedListId(e.target.value)}
+                className="bg-gray-100 dark:bg-gray-800 border border-transparent dark:border-gray-700 rounded-2xl px-4 py-4 text-gray-700 dark:text-gray-300 font-medium focus:ring-4 focus:ring-emerald-500/20 outline-none cursor-pointer transition-all max-w-[150px]"
+              >
+                {lists.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
+              </select>
+            ) : (
+              <div className="bg-gray-100 dark:bg-gray-800 border-transparent rounded-2xl px-4 py-4 text-gray-400 flex items-center">
+                No Lists
+              </div>
+            )}
+            
             <button 
               type="submit"
-              disabled={!newTaskTitle.trim()}
+              disabled={!newTaskTitle.trim() || !selectedListId}
               className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:hover:bg-emerald-500 text-white rounded-2xl px-6 py-4 font-bold transition-all flex items-center justify-center shadow-lg shadow-emerald-500/30 group"
             >
               <Plus className="group-hover:scale-110 transition-transform" />
@@ -246,66 +360,149 @@ export default function TaskPage() {
           </div>
         </form>
 
-        {/* Categories & Tasks */}
+        {/* Lists & Tasks */}
         {isLoading ? (
-          <div className="text-center py-10 text-gray-500">Loading tasks...</div>
-        ) : tasks.length === 0 ? (
+          <div className="text-center py-10 text-gray-500">Loading your data...</div>
+        ) : lists.length === 0 ? (
           <div className="text-center py-16 px-4 bg-gray-100/50 dark:bg-gray-800/30 rounded-3xl border border-dashed border-gray-300 dark:border-gray-700">
             <ListTodo className="w-16 h-16 mx-auto text-gray-400 dark:text-gray-600 mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No tasks yet</h3>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No lists found</h3>
             <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-              Add your first task above to start organizing your day.
+              Create a list above to start organizing your daily tasks.
             </p>
           </div>
         ) : (
           <div className="space-y-8">
-            {CATEGORIES.map(category => {
-              const catTasks = tasksByCategory[category];
-              if (!catTasks || catTasks.length === 0) return null;
+            {lists.map(list => {
+              const catTasks = tasksByList[list._id] || [];
+              const isEditingList = editingListId === list._id;
 
               return (
-                <div key={category} className="animate-in slide-in-from-bottom-4 duration-500">
-                  <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 px-2">
-                    {category}
-                  </h3>
-                  <div className="bg-white dark:bg-[#1a202c]/50 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col divide-y divide-gray-100 dark:divide-gray-800">
-                    {catTasks.map((task) => (
-                      <div 
-                        key={task._id} 
-                        className={`group flex items-center justify-between p-4 sm:p-5 transition-all ${
-                          task.isCompleted ? 'bg-gray-50/50 dark:bg-gray-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
-                        }`}
-                      >
-                        <div 
-                          className="flex items-center gap-4 flex-1 cursor-pointer"
-                          onClick={() => toggleTaskCompletion(task._id, task.isCompleted)}
-                        >
-                          <button 
-                            className={`flex-shrink-0 transition-colors ${
-                              task.isCompleted ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600 hover:text-emerald-400'
-                            }`}
-                          >
-                            {task.isCompleted ? <CheckCircle size={24} className="fill-emerald-500/[0.1]" /> : <Circle size={24} />}
-                          </button>
-                          <span 
-                            className={`text-base sm:text-lg font-medium transition-all duration-300 select-none flex-1 ${
-                              task.isCompleted 
-                                ? 'text-gray-400 dark:text-gray-600 line-through' 
-                                : 'text-gray-900 dark:text-white'
-                            }`}
-                          >
-                            {task.title}
-                          </span>
-                        </div>
+                <div key={list._id} className="animate-in slide-in-from-bottom-4 duration-500 relative">
+                  
+                  {/* List Header */}
+                  {isEditingList ? (
+                    <div className="flex items-center gap-2 mb-4">
+                      <input
+                        type="text"
+                        value={editListTitle}
+                        onChange={(e) => setEditListTitle(e.target.value)}
+                        className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-gray-900 dark:text-white"
+                        autoFocus
+                      />
+                      <button onClick={() => handleUpdateList(list._id)} className="p-1.5 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
+                        <Check size={16} />
+                      </button>
+                      <button onClick={() => setEditingListId(null)} className="p-1.5 text-gray-600 bg-gray-200 dark:bg-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="group flex items-center justify-between mb-4 px-2">
+                       <h3 className="text-lg font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                        {list.name}
+                        <span className="bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-xs px-2 py-0.5 rounded-full font-semibold">
+                          {catTasks.length}
+                        </span>
+                      </h3>
+                      <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex gap-2">
                         <button 
-                          onClick={() => deleteTask(task._id)}
-                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex-shrink-0"
-                          title="Delete task"
+                          onClick={() => { setEditingListId(list._id); setEditListTitle(list.name); }}
+                          className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-md transition-all"
                         >
-                          <Trash2 size={18} />
+                          <Edit3 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteList(list._id)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-all"
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </div>
-                    ))}
+                    </div>
+                  )}
+
+                  <div className="bg-white dark:bg-[#1a202c]/50 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col divide-y divide-gray-100 dark:divide-gray-800">
+                    {catTasks.length === 0 ? (
+                      <div className="p-6 text-center text-gray-500 dark:text-gray-400 text-sm">
+                        No tasks in this list yet.
+                      </div>
+                    ) : (
+                      catTasks.map((task) => {
+                        const isEditingTask = editingTaskId === task._id;
+
+                        return (
+                          <div 
+                            key={task._id} 
+                            className={`group flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 transition-all ${
+                              task.isCompleted ? 'bg-gray-50/50 dark:bg-gray-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-4 flex-1">
+                              <button 
+                                onClick={() => toggleTaskCompletion(task._id, task.isCompleted)}
+                                className={`flex-shrink-0 transition-colors ${
+                                  task.isCompleted ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600 hover:text-emerald-400'
+                                }`}
+                              >
+                                {task.isCompleted ? <CheckCircle size={24} className="fill-emerald-500/[0.1]" /> : <Circle size={24} />}
+                              </button>
+                              
+                              {isEditingTask ? (
+                                <div className="flex items-center gap-2 flex-1">
+                                  <input
+                                    type="text"
+                                    value={editTaskTitle}
+                                    onChange={(e) => setEditTaskTitle(e.target.value)}
+                                    className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none w-full text-base sm:text-lg text-gray-900 dark:text-white"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleUpdateTask(task._id);
+                                    }}
+                                  />
+                                  <button onClick={() => handleUpdateTask(task._id)} className="p-1.5 text-white bg-blue-500 rounded-lg">
+                                    <Check size={16} />
+                                  </button>
+                                  <button onClick={() => setEditingTaskId(null)} className="p-1.5 text-gray-600 bg-gray-200 dark:bg-gray-700 dark:text-gray-300 rounded-lg">
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span 
+                                  onClick={() => toggleTaskCompletion(task._id, task.isCompleted)}
+                                  className={`text-base sm:text-lg font-medium transition-all duration-300 select-none flex-1 cursor-pointer ${
+                                    task.isCompleted 
+                                      ? 'text-gray-400 dark:text-gray-600 line-through' 
+                                      : 'text-gray-900 dark:text-white'
+                                  }`}
+                                >
+                                  {task.title}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {!isEditingTask && (
+                              <div className="flex justify-end gap-2 mt-2 sm:mt-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                <button 
+                                  onClick={() => { setEditingTaskId(task._id); setEditTaskTitle(task.title); }}
+                                  className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all"
+                                  title="Edit task"
+                                >
+                                  <Edit3 size={18} />
+                                </button>
+                                <button 
+                                  onClick={() => deleteTask(task._id)}
+                                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
+                                  title="Delete task"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               );
