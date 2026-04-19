@@ -5,7 +5,8 @@ const transactionSchema = new mongoose.Schema({
   title: String,
   amount: Number,
   category: String,
-  date: String
+  date: String,
+  type: { type: String, enum: ['expense', 'income'], default: 'expense' }
 });
 
 const monthDataSchema = new mongoose.Schema({
