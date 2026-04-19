@@ -398,9 +398,16 @@ export default function MyWalletPage() {
                     </div>
                   </form>
                 ) : (
-                  <h3 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">
-                    ₹{currentData.budget.toLocaleString()}
-                  </h3>
+                  <div>
+                    <h3 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">
+                      ₹{totalAvailable.toLocaleString()}
+                    </h3>
+                    {totalIncome > 0 && (
+                      <p className="text-emerald-400/80 text-xs font-semibold mt-2">
+                        ↑ Auto-updated to include ₹{totalIncome.toLocaleString()} in deposits
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
               
