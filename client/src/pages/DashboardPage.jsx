@@ -1,7 +1,7 @@
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { Wallet, LogOut, LayoutGrid, Settings, User, Utensils, Car, ShoppingBag, Zap, Home, Coffee, ArrowRight, ChevronRight, CheckSquare } from 'lucide-react';
+import { Wallet, LogOut, LayoutGrid, Settings, User, Utensils, Car, ShoppingBag, Zap, Home, Coffee, ArrowRight, ChevronRight, CheckSquare, Circle, CheckCircle, Plus } from 'lucide-react';
 
 const CATEGORIES = {
   food: { label: 'Food & Dining', icon: Utensils, color: 'text-orange-500', bg: 'bg-orange-100 dark:bg-orange-500/10' },
@@ -24,17 +24,24 @@ export default function DashboardPage() {
   // Calculate Balance and Recent Transactions from API
   const [balance, setBalance] = useState(0);
   const [recentTransactions, setRecentTransactions] = useState([]);
+  
+  // Lists and Tasks state
+  const [lists, setLists] = useState([]);
+  const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       const token = localStorage.getItem('token');
       if (!token) return;
       try {
-        const res = await fetch('/api/wallet', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const [walletRes, listsRes, tasksRes] = await Promise.all([
+          fetch('/api/wallet', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch('/api/lists', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch('/api/tasks', { headers: { 'Authorization': `Bearer ${token}` } })
+        ]);
+        
+        if (walletRes.ok) {
+          const data = await walletRes.json();
           const today = new Date();
           const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
           const monthData = data[currentMonth];
@@ -50,12 +57,30 @@ export default function DashboardPage() {
             }
           }
         }
+        
+        if (listsRes.ok) setLists(await listsRes.json());
+        if (tasksRes.ok) setTasks(await tasksRes.json());
       } catch (e) {
         console.error(e);
       }
     };
     fetchData();
   }, []);
+
+  const toggleTaskCompletion = async (taskId, currentStatus) => {
+    try {
+      const token = localStorage.getItem('token');
+      // Optimistic upate
+      setTasks(tasks.map(t => t._id === taskId ? { ...t, isCompleted: !currentStatus } : t));
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ isCompleted: !currentStatus })
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const apps = [
     {
@@ -189,6 +214,62 @@ export default function DashboardPage() {
                         {tx.type === 'income' ? '+' : '-'}₹{tx.amount.toLocaleString()}
                       </p>
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Task Lists Section */}
+        {lists.length > 0 && (
+          <div className="mb-12">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white px-1">Your Lists & Tasks</h3>
+              <button 
+                onClick={() => navigate('/tasks')}
+                className="text-sm font-medium bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
+              >
+                <Plus size={16} /> Manage Lists
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {lists.map(list => {
+                const listTasks = tasks.filter(t => t.listId === list._id || (t.listId && t.listId._id === list._id));
+                const pendingTasks = listTasks.filter(t => !t.isCompleted);
+                
+                return (
+                  <div key={list._id} className="bg-white dark:bg-[#1a202c]/50 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden p-5 flex flex-col hover:border-gray-200 dark:hover:border-gray-700 transition-colors">
+                    <h4 className="font-bold text-gray-900 dark:text-white mb-4 flex justify-between items-center text-sm uppercase tracking-wider">
+                      {list.name}
+                      <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 px-2 py-1 rounded-md font-medium">{pendingTasks.length} pending</span>
+                    </h4>
+                    <div className="space-y-3 flex-1 mb-2">
+                      {pendingTasks.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-4 text-center opacity-70">
+                          <CheckCircle size={32} className="text-emerald-500 mb-2 opacity-50" />
+                          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">All tasks complete!</p>
+                        </div>
+                      ) : (
+                        pendingTasks.slice(0, 4).map(task => (
+                          <div key={task._id} className="flex items-start gap-3 group cursor-pointer" onClick={() => toggleTaskCompletion(task._id, task.isCompleted)}>
+                            <button className="text-gray-300 dark:text-gray-600 group-hover:text-emerald-500 flex-shrink-0 transition-colors mt-0.5">
+                              <Circle size={18} />
+                            </button>
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors line-clamp-2">{task.title}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {pendingTasks.length > 4 ? (
+                      <button className="text-xs font-semibold text-emerald-500 dark:text-emerald-400 pt-3 border-t border-gray-50 dark:border-gray-800 hover:text-emerald-600 mt-2 text-left" onClick={() => navigate('/tasks')}>
+                        + {pendingTasks.length - 4} more tasks
+                      </button>
+                    ) : (
+                      <button className="text-xs font-semibold text-gray-500 dark:text-gray-400 pt-3 border-t border-gray-50 dark:border-gray-800 hover:text-gray-700 dark:hover:text-gray-300 mt-2 text-left flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => navigate('/tasks')}>
+                        Go to list <ArrowRight size={12} />
+                      </button>
+                    )}
                   </div>
                 );
               })}
