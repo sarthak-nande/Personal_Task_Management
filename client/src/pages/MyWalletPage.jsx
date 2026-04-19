@@ -88,9 +88,28 @@ export default function MyWalletPage() {
   const [txError, setTxError] = useState('');
   const [editError, setEditError] = useState('');
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const transactionsPerPage = 5;
+
   const currentData = data[currentMonth] || { budget: 0, transactions: [] };
   const totalSpent = currentData.transactions.reduce((acc, tx) => acc + tx.amount, 0);
   const remaining = currentData.budget - totalSpent;
+
+  // Pagination Logic
+  const totalPages = Math.ceil(currentData.transactions.length / transactionsPerPage);
+  
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    } else if (totalPages === 0 && currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  const indexOfLastTx = currentPage * transactionsPerPage;
+  const indexOfFirstTx = indexOfLastTx - transactionsPerPage;
+  const currentTransactions = currentData.transactions.slice(indexOfFirstTx, indexOfLastTx);
 
   const handleSetBudget = (e) => {
     e.preventDefault();
@@ -554,7 +573,7 @@ export default function MyWalletPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {currentData.transactions.map((tx) => {
+                  {currentTransactions.map((tx) => {
                     const catObj = CATEGORIES.find(c => c.id === tx.category) || CATEGORIES.find(c => c.id === 'other');
                     const isEditing = editingTxId === tx.id;
                     
@@ -631,7 +650,7 @@ export default function MyWalletPage() {
                           <span className="font-bold text-gray-900 dark:text-white mr-2">
                             -₹{tx.amount.toLocaleString()}
                           </span>
-                          <div className="flex opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                          <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button 
                               onClick={() => startEditTx(tx)}
                               className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-md transition-all"
@@ -649,6 +668,39 @@ export default function MyWalletPage() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+              {totalPages > 1 && (
+                <div className="flex justify-center items-center mt-6 gap-2">
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalPages }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentPage(i + 1)}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium transition-colors ${
+                          currentPage === i + 1 
+                          ? 'bg-blue-500 text-white' 
+                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700'
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-50 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    Next
+                  </button>
                 </div>
               )}
             </div>
