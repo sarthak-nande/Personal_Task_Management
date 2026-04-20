@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage'
 import MyWalletPage from './pages/MyWalletPage'
 import SettingsPage from './pages/SettingsPage'
 import TaskPage from './pages/TaskPage'
+import ListsPage from './pages/ListsPage'
 
 export default function App() {
   const { user } = useAuth()
@@ -31,6 +32,10 @@ export default function App() {
         <Route
           path="/tasks"
           element={user ? <TaskPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/lists"
+          element={user ? <ListsPage /> : <Navigate to="/login" replace />}
         />
         <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
       </Routes>

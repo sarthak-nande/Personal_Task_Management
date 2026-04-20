@@ -15,7 +15,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'https://personal-task-management-xit9.vercel.app'
+      '/api': 'http://localhost:5000'
     }
   }
 })
