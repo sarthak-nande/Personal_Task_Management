@@ -95,10 +95,12 @@ export default function MyWalletPage() {
   const transactionsPerPage = 5;
 
   const currentData = data[currentMonth] || { budget: 0, transactions: [] };
-  const totalExpense = currentData.transactions.reduce((acc, tx) => acc + (tx.type === 'income' ? 0 : tx.amount), 0);
+  const rawExpense = currentData.transactions.reduce((acc, tx) => acc + (tx.type === 'expense' || !tx.type ? tx.amount : 0), 0);
   const totalIncome = currentData.transactions.reduce((acc, tx) => acc + (tx.type === 'income' ? tx.amount : 0), 0);
-  const remaining = currentData.budget + totalIncome - totalExpense;
+  const totalReimb = currentData.transactions.reduce((acc, tx) => acc + (tx.type === 'reimbursement' ? tx.amount : 0), 0);
+  const totalExpense = Math.max(0, rawExpense - totalReimb);
   const totalAvailable = currentData.budget + totalIncome;
+  const remaining = totalAvailable - totalExpense;
 
   // Pagination Logic
   const totalPages = Math.ceil(currentData.transactions.length / transactionsPerPage);
@@ -183,7 +185,8 @@ export default function MyWalletPage() {
     
     const oldTx = currentData.transactions.find(t => t.id === id);
     if (oldTx) {
-      const difference = (editType === 'income' ? -amountNum : amountNum) - (oldTx.type === 'income' ? -oldTx.amount : oldTx.amount);
+      const getVal = (type, amt) => (type === 'income' || type === 'reimbursement') ? -amt : amt;
+      const difference = getVal(editType, amountNum) - getVal(oldTx.type, oldTx.amount);
       if (difference > remaining) {
         setEditError(`Cannot exceed remaining budget of ₹${remaining.toLocaleString()}`);
         return;
@@ -251,7 +254,7 @@ export default function MyWalletPage() {
       'other': '#64748b' // slate-500
     };
 
-    currentData.transactions.filter(tx => tx.type !== 'income').forEach(tx => {
+    currentData.transactions.filter(tx => tx.type !== 'income' && tx.type !== 'reimbursement').forEach(tx => {
       const catId = tx.category || 'other';
       if (categoryTotals[catId]) {
         categoryTotals[catId].amount += tx.amount;
@@ -272,7 +275,7 @@ export default function MyWalletPage() {
     if (!defaultCat) return null;
 
     const categorySpent = currentData.transactions
-      .filter(tx => tx.category === defaultCat.id && tx.type !== 'income')
+      .filter(tx => tx.category === defaultCat.id && tx.type !== 'income' && tx.type !== 'reimbursement')
       .reduce((sum, tx) => sum + tx.amount, 0);
     
     const percentageOfTotal = totalAvailable > 0 ? (categorySpent / totalAvailable) * 100 : 0;
@@ -404,7 +407,7 @@ export default function MyWalletPage() {
                     </h3>
                     {totalIncome > 0 && (
                       <p className="text-emerald-400/80 text-xs font-semibold mt-2">
-                        ↑ Auto-updated to include ₹{totalIncome.toLocaleString()} in deposits
+                        ↑ Auto-updated to include ₹{totalIncome.toLocaleString()} in extra income
                       </p>
                     )}
                   </div>
@@ -515,16 +518,23 @@ export default function MyWalletPage() {
                   <button
                     type="button"
                     onClick={() => setTxType('expense')}
-                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${txType === 'expense' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    className={`flex-1 py-2 px-2 sm:px-4 rounded-lg text-xs sm:text-sm font-medium transition-all ${txType === 'expense' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                   >
                     Expense
                   </button>
                   <button
                     type="button"
                     onClick={() => setTxType('income')}
-                    className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${txType === 'income' ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    className={`flex-1 py-2 px-2 sm:px-4 rounded-lg text-xs sm:text-sm font-medium transition-all ${txType === 'income' ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                   >
                     Income
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTxType('reimbursement')}
+                    className={`flex-1 py-2 px-2 sm:px-4 rounded-lg text-xs sm:text-sm font-medium transition-all ${txType === 'reimbursement' ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    Refund
                   </button>
                 </div>
 
@@ -564,7 +574,7 @@ export default function MyWalletPage() {
                     value={txCategory}
                     onChange={(e) => setTxCategory(e.target.value)}
                     className="w-full bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all appearance-none cursor-pointer"
-                    disabled={txType === 'income'}
+                    disabled={txType === 'income' || txType === 'reimbursement'}
                   >
                     {CATEGORIES.map(c => (
                       <option key={c.id} value={c.id}>{c.label}</option>
@@ -640,12 +650,13 @@ export default function MyWalletPage() {
                             >
                               <option value="expense">Expense</option>
                               <option value="income">Income</option>
+                              <option value="reimbursement">Refund</option>
                             </select>
                             <select
                               value={editCategory}
                               onChange={(e) => setEditCategory(e.target.value)}
                               className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary cursor-pointer"
-                              disabled={editType === 'income'}
+                              disabled={editType === 'income' || editType === 'reimbursement'}
                             >
                               {CATEGORIES.map(c => (
                                 <option key={c.id} value={c.id}>{c.label}</option>
@@ -676,7 +687,7 @@ export default function MyWalletPage() {
                           <div>
                             <p className="font-semibold text-gray-900 dark:text-white">{tx.title}</p>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-2">
-                              <span>{tx.type === 'income' ? 'Deposit' : catObj.label}</span>
+                              <span>{tx.type === 'income' ? 'Extra Income' : tx.type === 'reimbursement' ? 'Refund' : catObj.label}</span>
                               <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"></span>
                               <span>
                                 {new Date(tx.date).toLocaleDateString('en-US', { 
@@ -688,8 +699,8 @@ export default function MyWalletPage() {
                         </div>
                         
                         <div className="flex items-center gap-3">
-                          <span className={`font-bold mr-2 ${tx.type === 'income' ? 'text-emerald-500' : 'text-gray-900 dark:text-white'}`}>
-                            {tx.type === 'income' ? '+' : '-'}₹{tx.amount.toLocaleString()}
+                          <span className={`font-bold mr-2 ${tx.type === 'income' || tx.type === 'reimbursement' ? 'text-emerald-500' : 'text-gray-900 dark:text-white'}`}>
+                            {tx.type === 'income' || tx.type === 'reimbursement' ? '+' : '-'}₹{tx.amount.toLocaleString()}
                           </span>
                           <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button 
